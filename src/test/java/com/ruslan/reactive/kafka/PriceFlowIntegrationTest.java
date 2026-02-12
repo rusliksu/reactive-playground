@@ -6,7 +6,6 @@ import com.ruslan.reactive.model.StockPrice;
 import com.ruslan.reactive.repository.StockPriceRepository;
 import com.ruslan.reactive.repository.StockRepository;
 import com.ruslan.reactive.service.StockPriceService;
-import com.ruslan.reactive.service.StockService;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -21,16 +20,21 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import reactor.core.publisher.Mono;
 import reactor.kafka.sender.KafkaSender;
 import reactor.kafka.sender.SenderOptions;
 import reactor.kafka.sender.SenderRecord;
 import reactor.test.StepVerifier;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-@SpringBootTest(properties = "app.price-simulator.enabled=false")
+@SpringBootTest(properties = {
+        "app.fetcher.moex-interval-ms=999999",
+        "app.fetcher.crypto-interval-ms=999999"
+})
 @Testcontainers
 class PriceFlowIntegrationTest {
 
@@ -75,7 +79,7 @@ class PriceFlowIntegrationTest {
 
     @Test
     void priceFlow_messageConsumed_savedToDatabase() {
-        Stock stock = stockRepository.findBySymbol("AAPL").block();
+        Stock stock = stockRepository.findBySymbol("SBER").block();
         if (stock == null) {
             return;
         }
@@ -83,10 +87,10 @@ class PriceFlowIntegrationTest {
         String json;
         try {
             json = objectMapper.writeValueAsString(Map.of(
-                    "symbol", "AAPL",
-                    "price", "180.50",
-                    "change", "2.00",
-                    "changePercent", "1.12",
+                    "symbol", "SBER",
+                    "price", "285.50",
+                    "change", "3.20",
+                    "changePercent", "1.13",
                     "timestamp", LocalDateTime.now().toString()
             ));
         } catch (Exception e) {
@@ -102,17 +106,17 @@ class PriceFlowIntegrationTest {
         KafkaSender<String, String> testSender = KafkaSender.create(
                 SenderOptions.create(producerProps));
 
-        testSender.send(reactor.core.publisher.Mono.just(
-                        SenderRecord.create(new ProducerRecord<>("stock-prices", "AAPL", json), "AAPL")))
+        testSender.send(Mono.just(
+                        SenderRecord.create(new ProducerRecord<>("stock-prices", "SBER", json), "SBER")))
                 .blockLast(Duration.ofSeconds(10));
         testSender.close();
 
         StepVerifier.create(
-                        reactor.core.publisher.Mono.delay(Duration.ofSeconds(3))
+                        Mono.delay(Duration.ofSeconds(3))
                                 .then(priceRepository.findLastByStockId(stock.getId()))
                 )
                 .expectNextMatches(price ->
-                        price.getPrice().compareTo(new java.math.BigDecimal("180.50")) == 0
+                        price.getPrice().compareTo(new BigDecimal("285.50")) == 0
                                 && price.getStockId().equals(stock.getId()))
                 .verifyComplete();
     }
@@ -120,11 +124,19 @@ class PriceFlowIntegrationTest {
     @Test
     void stockCrud_reactiveFlow_worksCorrectly() {
         StepVerifier.create(stockRepository.findAll())
-                .expectNextCount(5)
+                .expectNextCount(6)
                 .verifyComplete();
 
         StepVerifier.create(stockRepository.findBySymbol("BTC"))
-                .expectNextMatches(stock -> stock.getName().equals("Bitcoin"))
+                .expectNextMatches(stock -> stock.getName().equals("Bitcoin")
+                        && "USD".equals(stock.getCurrency())
+                        && "bitcoin".equals(stock.getExternalId()))
+                .verifyComplete();
+
+        StepVerifier.create(stockRepository.findBySymbol("SBER"))
+                .expectNextMatches(stock -> stock.getName().equals("Сбербанк")
+                        && "RUB".equals(stock.getCurrency())
+                        && "MOEX".equals(stock.getExchange()))
                 .verifyComplete();
     }
 
@@ -136,16 +148,16 @@ class PriceFlowIntegrationTest {
         }
 
         StockPrice price = new StockPrice(stock.getId(),
-                new java.math.BigDecimal("2300.00"),
-                new java.math.BigDecimal("20.00"),
-                new java.math.BigDecimal("0.88"));
+                new BigDecimal("2300.00"),
+                new BigDecimal("20.00"),
+                new BigDecimal("0.88"));
 
         StepVerifier.create(priceService.savePrice(price))
                 .expectNextMatches(saved -> saved.getId() != null)
                 .verifyComplete();
 
         StepVerifier.create(priceService.getLastPrice(stock.getId()))
-                .expectNextMatches(p -> p.getPrice().compareTo(new java.math.BigDecimal("2300.00")) == 0)
+                .expectNextMatches(p -> p.getPrice().compareTo(new BigDecimal("2300.00")) == 0)
                 .verifyComplete();
     }
 }

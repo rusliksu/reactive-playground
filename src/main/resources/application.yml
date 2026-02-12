@@ -19,6 +19,6 @@ spring:
 app:
   kafka:
     topic: stock-prices
-  price-simulator:
-    interval-ms: 2000
-    enabled: true
+  fetcher:
+    moex-interval-ms: 15000
+    crypto-interval-ms: 30000

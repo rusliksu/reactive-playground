@@ -30,23 +30,23 @@ class StockServiceTest {
 
     @Test
     void findAll_returnsAllStocks() {
-        Stock apple = new Stock("AAPL", "Apple Inc.", "NASDAQ");
-        Stock bitcoin = new Stock("BTC", "Bitcoin", "CRYPTO");
-        when(stockRepository.findAll()).thenReturn(Flux.just(apple, bitcoin));
+        Stock sber = new Stock("SBER", "Сбербанк", "MOEX");
+        Stock btc = new Stock("BTC", "Bitcoin", "CRYPTO");
+        when(stockRepository.findAll()).thenReturn(Flux.just(sber, btc));
 
         StepVerifier.create(stockService.findAll())
-                .expectNextMatches(stock -> stock.getSymbol().equals("AAPL"))
+                .expectNextMatches(stock -> stock.getSymbol().equals("SBER"))
                 .expectNextMatches(stock -> stock.getSymbol().equals("BTC"))
                 .verifyComplete();
     }
 
     @Test
     void findBySymbol_existingStock_returnsStock() {
-        Stock apple = new Stock("AAPL", "Apple Inc.", "NASDAQ");
-        when(stockRepository.findBySymbol("AAPL")).thenReturn(Mono.just(apple));
+        Stock sber = new Stock("SBER", "Сбербанк", "MOEX");
+        when(stockRepository.findBySymbol("SBER")).thenReturn(Mono.just(sber));
 
-        StepVerifier.create(stockService.findBySymbol("AAPL"))
-                .expectNextMatches(stock -> stock.getName().equals("Apple Inc."))
+        StepVerifier.create(stockService.findBySymbol("SBER"))
+                .expectNextMatches(stock -> stock.getName().equals("Сбербанк"))
                 .verifyComplete();
     }
 
@@ -60,32 +60,32 @@ class StockServiceTest {
 
     @Test
     void findBySymbol_convertsToUpperCase() {
-        Stock apple = new Stock("AAPL", "Apple Inc.", "NASDAQ");
-        when(stockRepository.findBySymbol("AAPL")).thenReturn(Mono.just(apple));
+        Stock sber = new Stock("SBER", "Сбербанк", "MOEX");
+        when(stockRepository.findBySymbol("SBER")).thenReturn(Mono.just(sber));
 
-        StepVerifier.create(stockService.findBySymbol("aapl"))
-                .expectNextMatches(stock -> stock.getSymbol().equals("AAPL"))
+        StepVerifier.create(stockService.findBySymbol("sber"))
+                .expectNextMatches(stock -> stock.getSymbol().equals("SBER"))
                 .verifyComplete();
     }
 
     @Test
     void create_newStock_savesSuccessfully() {
-        Stock stock = new Stock("TSLA", "Tesla Inc.", "NASDAQ");
-        Stock saved = new Stock("TSLA", "Tesla Inc.", "NASDAQ");
+        Stock stock = new Stock("GAZP", "Газпром", "MOEX");
+        Stock saved = new Stock("GAZP", "Газпром", "MOEX");
         saved.setId(1L);
 
-        when(stockRepository.existsBySymbol("TSLA")).thenReturn(Mono.just(false));
+        when(stockRepository.existsBySymbol("GAZP")).thenReturn(Mono.just(false));
         when(stockRepository.save(any(Stock.class))).thenReturn(Mono.just(saved));
 
         StepVerifier.create(stockService.create(stock))
-                .expectNextMatches(s -> s.getId() != null && s.getSymbol().equals("TSLA"))
+                .expectNextMatches(s -> s.getId() != null && s.getSymbol().equals("GAZP"))
                 .verifyComplete();
     }
 
     @Test
     void create_duplicateSymbol_returnsError() {
-        Stock stock = new Stock("AAPL", "Apple Duplicate", "NASDAQ");
-        when(stockRepository.existsBySymbol("AAPL")).thenReturn(Mono.just(true));
+        Stock stock = new Stock("SBER", "Сбер дубль", "MOEX");
+        when(stockRepository.existsBySymbol("SBER")).thenReturn(Mono.just(true));
 
         StepVerifier.create(stockService.create(stock))
                 .expectErrorMatches(e -> e instanceof IllegalArgumentException
@@ -95,12 +95,12 @@ class StockServiceTest {
 
     @Test
     void deleteBySymbol_existingStock_deletesSuccessfully() {
-        Stock apple = new Stock("AAPL", "Apple Inc.", "NASDAQ");
-        apple.setId(1L);
-        when(stockRepository.findBySymbol("AAPL")).thenReturn(Mono.just(apple));
+        Stock sber = new Stock("SBER", "Сбербанк", "MOEX");
+        sber.setId(1L);
+        when(stockRepository.findBySymbol("SBER")).thenReturn(Mono.just(sber));
         when(stockRepository.deleteById(1L)).thenReturn(Mono.empty());
 
-        StepVerifier.create(stockService.deleteBySymbol("AAPL"))
+        StepVerifier.create(stockService.deleteBySymbol("SBER"))
                 .verifyComplete();
     }
 

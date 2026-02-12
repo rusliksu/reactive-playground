@@ -13,6 +13,8 @@ public class Stock {
     private String symbol;
     private String name;
     private String exchange;
+    private String externalId;
+    private String currency;
     private LocalDateTime createdAt;
 
     public Stock() {
@@ -55,6 +57,22 @@ public class Stock {
 
     public void setExchange(String exchange) {
         this.exchange = exchange;
+    }
+
+    public String getExternalId() {
+        return externalId;
+    }
+
+    public void setExternalId(String externalId) {
+        this.externalId = externalId;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -2,9 +2,9 @@ package com.ruslan.reactive.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ruslan.reactive.client.CoinGeckoClient;
+import com.ruslan.reactive.client.MoexClient;
 import com.ruslan.reactive.model.Stock;
-import com.ruslan.reactive.model.StockPrice;
-import com.ruslan.reactive.repository.StockPriceRepository;
 import com.ruslan.reactive.repository.StockRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -12,7 +12,6 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -21,117 +20,123 @@ import reactor.kafka.sender.KafkaSender;
 import reactor.kafka.sender.SenderRecord;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 @Component
-@ConditionalOnProperty(name = "app.price-simulator.enabled", havingValue = "true")
 public class PriceProducer {
 
     private static final Logger log = LoggerFactory.getLogger(PriceProducer.class);
 
     private final KafkaSender<String, String> kafkaSender;
     private final StockRepository stockRepository;
-    private final StockPriceRepository priceRepository;
+    private final MoexClient moexClient;
+    private final CoinGeckoClient coinGeckoClient;
     private final ObjectMapper objectMapper;
     private final String topic;
-    private final long intervalMs;
+    private final long moexIntervalMs;
+    private final long cryptoIntervalMs;
 
-    private final Map<String, BigDecimal> lastPrices = new ConcurrentHashMap<>();
-    private Disposable subscription;
-
-    private static final Map<String, BigDecimal> DEFAULT_PRICES = Map.of(
-            "AAPL", new BigDecimal("178.50"),
-            "GOOGL", new BigDecimal("141.80"),
-            "BTC", new BigDecimal("43250.00"),
-            "ETH", new BigDecimal("2280.00"),
-            "SBER", new BigDecimal("271.50")
-    );
+    private Disposable moexSubscription;
+    private Disposable cryptoSubscription;
 
     public PriceProducer(KafkaSender<String, String> kafkaSender,
                          StockRepository stockRepository,
-                         StockPriceRepository priceRepository,
+                         MoexClient moexClient,
+                         CoinGeckoClient coinGeckoClient,
                          ObjectMapper objectMapper,
                          @Value("${app.kafka.topic}") String topic,
-                         @Value("${app.price-simulator.interval-ms}") long intervalMs) {
+                         @Value("${app.fetcher.moex-interval-ms:15000}") long moexIntervalMs,
+                         @Value("${app.fetcher.crypto-interval-ms:30000}") long cryptoIntervalMs) {
         this.kafkaSender = kafkaSender;
         this.stockRepository = stockRepository;
-        this.priceRepository = priceRepository;
+        this.moexClient = moexClient;
+        this.coinGeckoClient = coinGeckoClient;
         this.objectMapper = objectMapper;
         this.topic = topic;
-        this.intervalMs = intervalMs;
+        this.moexIntervalMs = moexIntervalMs;
+        this.cryptoIntervalMs = cryptoIntervalMs;
     }
 
     @PostConstruct
     public void start() {
-        subscription = Flux.interval(Duration.ofMillis(intervalMs))
-                .flatMap(tick -> stockRepository.findAll()
-                        .flatMap(this::generatePrice))
-                .subscribe(
-                        result -> {},
-                        error -> log.error("Price simulator error", error)
-                );
-        log.info("Price simulator started with interval {}ms", intervalMs);
+        moexSubscription = Flux.interval(Duration.ZERO, Duration.ofMillis(moexIntervalMs))
+                .flatMap(tick -> fetchMoexPrices()
+                        .onErrorResume(e -> {
+                            log.warn("MOEX fetch error: {}", e.getMessage());
+                            return Flux.empty();
+                        }))
+                .subscribe();
+
+        cryptoSubscription = Flux.interval(Duration.ZERO, Duration.ofMillis(cryptoIntervalMs))
+                .flatMap(tick -> fetchCryptoPrices()
+                        .onErrorResume(e -> {
+                            log.warn("Crypto fetch error: {}", e.getMessage());
+                            return Flux.empty();
+                        }))
+                .subscribe();
+
+        log.info("Price fetcher started: MOEX every {}ms, Crypto every {}ms", moexIntervalMs, cryptoIntervalMs);
     }
 
     @PreDestroy
     public void stop() {
-        if (subscription != null && !subscription.isDisposed()) {
-            subscription.dispose();
+        if (moexSubscription != null && !moexSubscription.isDisposed()) {
+            moexSubscription.dispose();
+        }
+        if (cryptoSubscription != null && !cryptoSubscription.isDisposed()) {
+            cryptoSubscription.dispose();
         }
     }
 
-    private Mono<Void> generatePrice(Stock stock) {
-        return getLastPrice(stock)
-                .map(lastPrice -> simulatePrice(stock.getSymbol(), lastPrice))
-                .flatMap(price -> sendToKafka(stock.getSymbol(), price));
+    private Flux<Void> fetchMoexPrices() {
+        return stockRepository.findAll()
+                .filter(stock -> "MOEX".equals(stock.getExchange()))
+                .collectList()
+                .flatMapMany(stocks -> {
+                    if (stocks.isEmpty()) return Flux.empty();
+                    List<String> symbols = stocks.stream()
+                            .map(Stock::getExternalId)
+                            .collect(Collectors.toList());
+                    return moexClient.fetchPrices(symbols)
+                            .flatMap(data -> sendToKafka(data.symbol(), data.price(), data.change(), data.changePercent()));
+                });
     }
 
-    private Mono<BigDecimal> getLastPrice(Stock stock) {
-        BigDecimal cached = lastPrices.get(stock.getSymbol());
-        if (cached != null) {
-            return Mono.just(cached);
-        }
-        return priceRepository.findLastByStockId(stock.getId())
-                .map(StockPrice::getPrice)
-                .defaultIfEmpty(DEFAULT_PRICES.getOrDefault(stock.getSymbol(), new BigDecimal("100.00")));
+    private Flux<Void> fetchCryptoPrices() {
+        return stockRepository.findAll()
+                .filter(stock -> "CRYPTO".equals(stock.getExchange()))
+                .collectList()
+                .flatMapMany(stocks -> {
+                    if (stocks.isEmpty()) return Flux.empty();
+                    Map<String, String> idToSymbol = new LinkedHashMap<>();
+                    for (Stock stock : stocks) {
+                        idToSymbol.put(stock.getExternalId(), stock.getSymbol());
+                    }
+                    return coinGeckoClient.fetchPrices(idToSymbol)
+                            .flatMap(data -> sendToKafka(data.symbol(), data.price(), data.change(), data.changePercent()));
+                });
     }
 
-    private StockPrice simulatePrice(String symbol, BigDecimal lastPrice) {
-        double changePercent = (ThreadLocalRandom.current().nextDouble() - 0.5) * 4;
-        BigDecimal change = lastPrice.multiply(BigDecimal.valueOf(changePercent / 100))
-                .setScale(8, RoundingMode.HALF_UP);
-        BigDecimal newPrice = lastPrice.add(change).max(BigDecimal.valueOf(0.01));
-
-        lastPrices.put(symbol, newPrice);
-
-        StockPrice stockPrice = new StockPrice();
-        stockPrice.setPrice(newPrice);
-        stockPrice.setChange(change);
-        stockPrice.setChangePercent(BigDecimal.valueOf(changePercent).setScale(4, RoundingMode.HALF_UP));
-        stockPrice.setTimestamp(LocalDateTime.now());
-        return stockPrice;
-    }
-
-    private Mono<Void> sendToKafka(String symbol, StockPrice price) {
+    private Mono<Void> sendToKafka(String symbol, BigDecimal price, BigDecimal change, BigDecimal changePercent) {
         try {
             String json = objectMapper.writeValueAsString(Map.of(
                     "symbol", symbol,
-                    "price", price.getPrice(),
-                    "change", price.getChange(),
-                    "changePercent", price.getChangePercent(),
-                    "timestamp", price.getTimestamp().toString()
+                    "price", price,
+                    "change", change,
+                    "changePercent", changePercent,
+                    "timestamp", LocalDateTime.now().toString()
             ));
 
             SenderRecord<String, String, String> record = SenderRecord.create(
                     new ProducerRecord<>(topic, symbol, json), symbol);
 
             return kafkaSender.send(Mono.just(record))
-                    .doOnNext(result -> log.debug("Sent price for {}: {}", symbol, price.getPrice()))
+                    .doOnNext(result -> log.info("Fetched {} = {} ({}%)", symbol, price, changePercent))
                     .then();
         } catch (JsonProcessingException e) {
             return Mono.error(e);

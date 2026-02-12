@@ -57,31 +57,56 @@
     </changeSet>
 
     <changeSet id="3" author="ruslan">
-        <comment>Insert sample stocks</comment>
+        <comment>Add external_id and currency columns</comment>
+        <addColumn tableName="stock">
+            <column name="external_id" type="VARCHAR(100)"/>
+            <column name="currency" type="VARCHAR(3)" defaultValue="RUB"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="4" author="ruslan">
+        <comment>Insert stocks: MOEX + Crypto</comment>
         <insert tableName="stock">
-            <column name="symbol" value="AAPL"/>
-            <column name="name" value="Apple Inc."/>
-            <column name="exchange" value="NASDAQ"/>
+            <column name="symbol" value="SBER"/>
+            <column name="name" value="Сбербанк"/>
+            <column name="exchange" value="MOEX"/>
+            <column name="external_id" value="SBER"/>
+            <column name="currency" value="RUB"/>
         </insert>
         <insert tableName="stock">
-            <column name="symbol" value="GOOGL"/>
-            <column name="name" value="Alphabet Inc."/>
-            <column name="exchange" value="NASDAQ"/>
+            <column name="symbol" value="GAZP"/>
+            <column name="name" value="Газпром"/>
+            <column name="exchange" value="MOEX"/>
+            <column name="external_id" value="GAZP"/>
+            <column name="currency" value="RUB"/>
+        </insert>
+        <insert tableName="stock">
+            <column name="symbol" value="LKOH"/>
+            <column name="name" value="ЛУКОЙЛ"/>
+            <column name="exchange" value="MOEX"/>
+            <column name="external_id" value="LKOH"/>
+            <column name="currency" value="RUB"/>
+        </insert>
+        <insert tableName="stock">
+            <column name="symbol" value="YNDX"/>
+            <column name="name" value="Яндекс"/>
+            <column name="exchange" value="MOEX"/>
+            <column name="external_id" value="YDEX"/>
+            <column name="currency" value="RUB"/>
         </insert>
         <insert tableName="stock">
             <column name="symbol" value="BTC"/>
             <column name="name" value="Bitcoin"/>
             <column name="exchange" value="CRYPTO"/>
+            <column name="external_id" value="bitcoin"/>
+            <column name="currency" value="USD"/>
         </insert>
         <insert tableName="stock">
             <column name="symbol" value="ETH"/>
             <column name="name" value="Ethereum"/>
             <column name="exchange" value="CRYPTO"/>
-        </insert>
-        <insert tableName="stock">
-            <column name="symbol" value="SBER"/>
-            <column name="name" value="Сбербанк"/>
-            <column name="exchange" value="MOEX"/>
+            <column name="external_id" value="ethereum"/>
+            <column name="currency" value="USD"/>
         </insert>
     </changeSet>
 

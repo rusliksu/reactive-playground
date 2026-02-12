@@ -1,6 +1,7 @@
 package com.ruslan.reactive.handler;
 
-import com.ruslan.reactive.config.R2dbcConfig;
+import com.ruslan.reactive.client.CoinGeckoClient;
+import com.ruslan.reactive.client.MoexClient;
 import com.ruslan.reactive.kafka.PriceConsumer;
 import com.ruslan.reactive.kafka.PriceProducer;
 import com.ruslan.reactive.model.Stock;
@@ -12,9 +13,9 @@ import com.ruslan.reactive.service.StockService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -41,14 +42,20 @@ class StockHandlerTest {
     @MockitoBean
     private PriceConsumer priceConsumer;
 
+    @MockitoBean
+    private MoexClient moexClient;
+
+    @MockitoBean
+    private CoinGeckoClient coinGeckoClient;
+
     @Test
     void getAllStocks_returnsStockList() {
-        Stock apple = new Stock("AAPL", "Apple Inc.", "NASDAQ");
-        apple.setId(1L);
+        Stock sber = new Stock("SBER", "Сбербанк", "MOEX");
+        sber.setId(1L);
         Stock btc = new Stock("BTC", "Bitcoin", "CRYPTO");
         btc.setId(2L);
 
-        when(stockRepository.findAll()).thenReturn(Flux.just(apple, btc));
+        when(stockRepository.findAll()).thenReturn(Flux.just(sber, btc));
 
         webTestClient.get()
                 .uri("/api/stocks")
@@ -62,18 +69,18 @@ class StockHandlerTest {
 
     @Test
     void getStockBySymbol_existingStock_returnsStock() {
-        Stock apple = new Stock("AAPL", "Apple Inc.", "NASDAQ");
-        apple.setId(1L);
-        when(stockRepository.findBySymbol("AAPL")).thenReturn(Mono.just(apple));
+        Stock sber = new Stock("SBER", "Сбербанк", "MOEX");
+        sber.setId(1L);
+        when(stockRepository.findBySymbol("SBER")).thenReturn(Mono.just(sber));
 
         webTestClient.get()
-                .uri("/api/stocks/AAPL")
+                .uri("/api/stocks/SBER")
                 .accept(MediaType.APPLICATION_JSON)
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.symbol").isEqualTo("AAPL")
-                .jsonPath("$.name").isEqualTo("Apple Inc.");
+                .jsonPath("$.symbol").isEqualTo("SBER")
+                .jsonPath("$.name").isEqualTo("Сбербанк");
     }
 
     @Test
@@ -89,11 +96,11 @@ class StockHandlerTest {
 
     @Test
     void createStock_validInput_returnsCreated() {
-        Stock stock = new Stock("TSLA", "Tesla Inc.", "NASDAQ");
-        Stock saved = new Stock("TSLA", "Tesla Inc.", "NASDAQ");
+        Stock stock = new Stock("GAZP", "Газпром", "MOEX");
+        Stock saved = new Stock("GAZP", "Газпром", "MOEX");
         saved.setId(1L);
 
-        when(stockRepository.existsBySymbol("TSLA")).thenReturn(Mono.just(false));
+        when(stockRepository.existsBySymbol("GAZP")).thenReturn(Mono.just(false));
         when(stockRepository.save(any(Stock.class))).thenReturn(Mono.just(saved));
 
         webTestClient.post()
@@ -103,14 +110,14 @@ class StockHandlerTest {
                 .exchange()
                 .expectStatus().isCreated()
                 .expectBody()
-                .jsonPath("$.symbol").isEqualTo("TSLA")
+                .jsonPath("$.symbol").isEqualTo("GAZP")
                 .jsonPath("$.id").isEqualTo(1);
     }
 
     @Test
     void createStock_duplicateSymbol_returnsBadRequest() {
-        Stock stock = new Stock("AAPL", "Apple Duplicate", "NASDAQ");
-        when(stockRepository.existsBySymbol("AAPL")).thenReturn(Mono.just(true));
+        Stock stock = new Stock("SBER", "Сбер дубль", "MOEX");
+        when(stockRepository.existsBySymbol("SBER")).thenReturn(Mono.just(true));
 
         webTestClient.post()
                 .uri("/api/stocks")
@@ -122,13 +129,13 @@ class StockHandlerTest {
 
     @Test
     void deleteStock_existingStock_returnsNoContent() {
-        Stock apple = new Stock("AAPL", "Apple Inc.", "NASDAQ");
-        apple.setId(1L);
-        when(stockRepository.findBySymbol("AAPL")).thenReturn(Mono.just(apple));
+        Stock sber = new Stock("SBER", "Сбербанк", "MOEX");
+        sber.setId(1L);
+        when(stockRepository.findBySymbol("SBER")).thenReturn(Mono.just(sber));
         when(stockRepository.deleteById(1L)).thenReturn(Mono.empty());
 
         webTestClient.delete()
-                .uri("/api/stocks/AAPL")
+                .uri("/api/stocks/SBER")
                 .exchange()
                 .expectStatus().isNoContent();
     }
