@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: reactive-playground
+
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/reactive_stocks
+    username: reactive
+    password: reactive
+
+  liquibase:
+    url: jdbc:postgresql://localhost:5432/reactive_stocks
+    user: reactive
+    password: reactive
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+app:
+  kafka:
+    topic: stock-prices
+  price-simulator:
+    interval-ms: 2000
+    enabled: true

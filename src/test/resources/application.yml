@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: reactive-playground-test
+
+app:
+  kafka:
+    topic: stock-prices
+  price-simulator:
+    interval-ms: 2000
+    enabled: false

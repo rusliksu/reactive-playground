@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="1" author="ruslan">
+        <comment>Create stock table</comment>
+        <createTable tableName="stock">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="symbol" type="VARCHAR(20)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="exchange" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="NOW()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="2" author="ruslan">
+        <comment>Create stock_price table</comment>
+        <createTable tableName="stock_price">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="stock_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="price" type="DECIMAL(18,8)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="change" type="DECIMAL(18,8)"/>
+            <column name="change_percent" type="DECIMAL(10,4)"/>
+            <column name="timestamp" type="TIMESTAMP" defaultValueComputed="NOW()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+                baseTableName="stock_price"
+                baseColumnNames="stock_id"
+                constraintName="fk_stock_price_stock"
+                referencedTableName="stock"
+                referencedColumnNames="id"/>
+        <createIndex tableName="stock_price" indexName="idx_stock_price_stock_id_timestamp">
+            <column name="stock_id"/>
+            <column name="timestamp" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="3" author="ruslan">
+        <comment>Insert sample stocks</comment>
+        <insert tableName="stock">
+            <column name="symbol" value="AAPL"/>
+            <column name="name" value="Apple Inc."/>
+            <column name="exchange" value="NASDAQ"/>
+        </insert>
+        <insert tableName="stock">
+            <column name="symbol" value="GOOGL"/>
+            <column name="name" value="Alphabet Inc."/>
+            <column name="exchange" value="NASDAQ"/>
+        </insert>
+        <insert tableName="stock">
+            <column name="symbol" value="BTC"/>
+            <column name="name" value="Bitcoin"/>
+            <column name="exchange" value="CRYPTO"/>
+        </insert>
+        <insert tableName="stock">
+            <column name="symbol" value="ETH"/>
+            <column name="name" value="Ethereum"/>
+            <column name="exchange" value="CRYPTO"/>
+        </insert>
+        <insert tableName="stock">
+            <column name="symbol" value="SBER"/>
+            <column name="name" value="Сбербанк"/>
+            <column name="exchange" value="MOEX"/>
+        </insert>
+    </changeSet>
+
+</databaseChangeLog>
