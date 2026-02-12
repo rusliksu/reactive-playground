@@ -3,7 +3,7 @@ package com.ruslan.reactive.kafka;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruslan.reactive.client.CoinGeckoClient;
-import com.ruslan.reactive.client.MoexClient;
+import com.ruslan.reactive.client.TinkoffClient;
 import com.ruslan.reactive.model.Stock;
 import com.ruslan.reactive.repository.StockRepository;
 import jakarta.annotation.PostConstruct;
@@ -34,7 +34,7 @@ public class PriceProducer {
 
     private final KafkaSender<String, String> kafkaSender;
     private final StockRepository stockRepository;
-    private final MoexClient moexClient;
+    private final TinkoffClient tinkoffClient;
     private final CoinGeckoClient coinGeckoClient;
     private final ObjectMapper objectMapper;
     private final String topic;
@@ -46,7 +46,7 @@ public class PriceProducer {
 
     public PriceProducer(KafkaSender<String, String> kafkaSender,
                          StockRepository stockRepository,
-                         MoexClient moexClient,
+                         TinkoffClient tinkoffClient,
                          CoinGeckoClient coinGeckoClient,
                          ObjectMapper objectMapper,
                          @Value("${app.kafka.topic}") String topic,
@@ -54,7 +54,7 @@ public class PriceProducer {
                          @Value("${app.fetcher.crypto-interval-ms:30000}") long cryptoIntervalMs) {
         this.kafkaSender = kafkaSender;
         this.stockRepository = stockRepository;
-        this.moexClient = moexClient;
+        this.tinkoffClient = tinkoffClient;
         this.coinGeckoClient = coinGeckoClient;
         this.objectMapper = objectMapper;
         this.topic = topic;
@@ -99,11 +99,14 @@ public class PriceProducer {
                 .collectList()
                 .flatMapMany(stocks -> {
                     if (stocks.isEmpty()) return Flux.empty();
-                    List<String> symbols = stocks.stream()
-                            .map(Stock::getExternalId)
-                            .collect(Collectors.toList());
-                    return moexClient.fetchPrices(symbols)
-                            .flatMap(data -> sendToKafka(data.symbol(), data.price(), data.change(), data.changePercent()));
+                    Map<String, String> externalToInternal = stocks.stream()
+                            .collect(Collectors.toMap(Stock::getExternalId, Stock::getSymbol));
+                    List<String> externalIds = new java.util.ArrayList<>(externalToInternal.keySet());
+                    return tinkoffClient.fetchPrices(externalIds)
+                            .flatMap(data -> {
+                                String internalSymbol = externalToInternal.getOrDefault(data.symbol(), data.symbol());
+                                return sendToKafka(internalSymbol, data.price(), data.change(), data.changePercent());
+                            });
                 });
     }
 

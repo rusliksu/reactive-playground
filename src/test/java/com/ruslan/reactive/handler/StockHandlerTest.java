@@ -1,7 +1,7 @@
 package com.ruslan.reactive.handler;
 
 import com.ruslan.reactive.client.CoinGeckoClient;
-import com.ruslan.reactive.client.MoexClient;
+import com.ruslan.reactive.client.TinkoffClient;
 import com.ruslan.reactive.kafka.PriceConsumer;
 import com.ruslan.reactive.kafka.PriceProducer;
 import com.ruslan.reactive.model.Stock;
@@ -43,7 +43,7 @@ class StockHandlerTest {
     private PriceConsumer priceConsumer;
 
     @MockitoBean
-    private MoexClient moexClient;
+    private TinkoffClient tinkoffClient;
 
     @MockitoBean
     private CoinGeckoClient coinGeckoClient;
