@@ -1,81 +1,84 @@
 # Reactive Stock/Crypto Tracker
 
-Реактивное приложение для отслеживания цен акций и криптовалют в реальном времени.
-Учебный проект для закрепления Spring WebFlux, R2DBC, Reactor Kafka.
+![Java](https://img.shields.io/badge/Java-17-orange)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4-green)
 
-## Источники данных
+A reactive application for tracking stock and cryptocurrency prices in real time.
+Built as a learning project to practice Spring WebFlux, R2DBC, and Reactor Kafka.
 
-- **MOEX ISS** — российские акции (SBER, GAZP, LKOH, YNDX), бесплатный API без ключа
-- **CoinGecko** — криптовалюты (BTC, ETH), бесплатный API без ключа
+## Data Sources
 
-## Стек
+- **MOEX ISS** — Russian equities (SBER, GAZP, LKOH, YNDX), free public API (no key required)
+- **CoinGecko** — Cryptocurrencies (BTC, ETH), free public API (no key required)
+
+## Tech Stack
 
 - **Java 17** + **Spring Boot 3.4.x**
-- **Spring WebFlux** (Netty) — функциональный роутинг + SSE
-- **WebClient** — реактивные HTTP-запросы к MOEX и CoinGecko
-- **R2DBC PostgreSQL** — реактивный доступ к БД
-- **Liquibase** — миграции
-- **Reactor Kafka** — реактивный producer/consumer
-- **Testcontainers** — интеграционные тесты
+- **Spring WebFlux** (Netty) — functional routing + SSE
+- **WebClient** — reactive HTTP calls to MOEX and CoinGecko
+- **R2DBC PostgreSQL** — reactive database access
+- **Liquibase** — database migrations
+- **Reactor Kafka** — reactive producer/consumer
+- **Testcontainers** — integration tests
 
-## Архитектура
+## Architecture
 
 ```
-WebFlux REST API  ←→  Service Layer (Mono/Flux)  ←→  R2DBC PostgreSQL
-     ↑                       ↑
+WebFlux REST API  <-->  Service Layer (Mono/Flux)  <-->  R2DBC PostgreSQL
+     ^                       ^
      SSE Stream         Kafka Consumer
-                             ↑
+                             ^
                         Kafka Topic: stock-prices
-                             ↑
+                             ^
                    PriceFetcher (Producer)
-                    ↙              ↘
+                    /              \
            MOEX ISS API      CoinGecko API
           (SBER,GAZP,...)     (BTC, ETH)
 ```
 
-## Запуск
+## Getting Started
 
 ```bash
-# 1. Поднять PostgreSQL + Kafka
+# 1. Start PostgreSQL + Kafka
 docker-compose up -d
 
-# 2. Запустить приложение
+# 2. Run the application
 ./gradlew bootRun
 
-# 3. Проверить API
+# 3. Try the API
 curl http://localhost:8080/api/stocks
 curl http://localhost:8080/api/stocks/SBER
-curl -N http://localhost:8080/api/stocks/stream             # SSE — все цены
-curl -N http://localhost:8080/api/stocks/BTC/prices/stream  # SSE — только BTC
+curl -N http://localhost:8080/api/stocks/stream             # SSE — all prices
+curl -N http://localhost:8080/api/stocks/BTC/prices/stream  # SSE — BTC only
 ```
 
 ## API
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/api/stocks` | Список всех акций |
-| GET | `/api/stocks/{symbol}` | Акция по символу |
-| POST | `/api/stocks` | Добавить акцию |
-| DELETE | `/api/stocks/{symbol}` | Удалить акцию |
-| GET | `/api/stocks/stream` | SSE поток всех цен |
-| GET | `/api/stocks/{symbol}/prices/stream` | SSE поток цен акции |
-| GET | `/api/stocks/{symbol}/prices?limit=50` | История цен |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/stocks` | List all stocks |
+| GET | `/api/stocks/{symbol}` | Get stock by symbol |
+| POST | `/api/stocks` | Add a stock |
+| DELETE | `/api/stocks/{symbol}` | Remove a stock |
+| GET | `/api/stocks/stream` | SSE stream of all prices |
+| GET | `/api/stocks/{symbol}/prices/stream` | SSE stream for a specific stock |
+| GET | `/api/stocks/{symbol}/prices?limit=50` | Price history |
 
-## Тесты
+## Tests
 
 ```bash
 ./gradlew test
 ```
 
-- **StockServiceTest** — unit-тесты с StepVerifier + Mockito
-- **StockHandlerTest** — WebFlux тесты с WebTestClient
-- **PriceFlowIntegrationTest** — e2e с Testcontainers (PostgreSQL + Kafka)
+- **StockServiceTest** — unit tests with StepVerifier + Mockito
+- **StockHandlerTest** — WebFlux tests with WebTestClient
+- **PriceFlowIntegrationTest** — end-to-end with Testcontainers (PostgreSQL + Kafka)
 
-## Паттерны из курса JVA-074
+## Patterns Used
 
-1. Функциональный роутинг (`RouterFunction` + `HandlerFunction`)
-2. SSE через `Flux` + `MediaType.TEXT_EVENT_STREAM`
-3. `StepVerifier` для тестирования реактивных потоков
-4. Reactor Kafka — реактивный producer/consumer
-5. WebClient — реактивный HTTP-клиент
-6. Явный DI через конструктор (без `@Autowired`)
+1. Functional routing (`RouterFunction` + `HandlerFunction`)
+2. SSE via `Flux` + `MediaType.TEXT_EVENT_STREAM`
+3. `StepVerifier` for testing reactive streams
+4. Reactor Kafka — reactive producer/consumer
+5. WebClient — reactive HTTP client
+6. Explicit constructor-based DI (no `@Autowired`)
