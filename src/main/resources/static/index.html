@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Reactive Stocks</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f1923; color: #e0e0e0; padding: 20px; }
+        h1 { text-align: center; color: #4fc3f7; margin-bottom: 20px; font-size: 1.6em; }
+        .stocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card {
+            background: #1a2733;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #263545;
+            transition: border-color 0.3s;
+        }
+        .card.flash { border-color: #4fc3f7; }
+        .card .symbol { font-size: 1.3em; font-weight: 700; color: #fff; }
+        .card .name { font-size: 0.85em; color: #78909c; }
+        .card .price { font-size: 2em; font-weight: 700; margin: 8px 0; }
+        .card .change { font-size: 0.95em; font-weight: 600; }
+        .up { color: #66bb6a; }
+        .down { color: #ef5350; }
+        .neutral { color: #78909c; }
+        .chart-container { background: #1a2733; border-radius: 12px; padding: 20px; border: 1px solid #263545; }
+        .chart-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .chart-tabs button {
+            background: #263545;
+            border: none;
+            color: #90a4ae;
+            padding: 6px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .chart-tabs button.active { background: #4fc3f7; color: #0f1923; font-weight: 600; }
+        .status { text-align: center; margin-top: 16px; font-size: 0.8em; color: #546e7a; }
+        .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+        .dot.connected { background: #66bb6a; }
+        .dot.disconnected { background: #ef5350; }
+    </style>
+</head>
+<body>
+    <h1>Reactive Stock Tracker</h1>
+    <div class="stocks" id="stocks"></div>
+    <div class="chart-container">
+        <div class="chart-tabs" id="tabs"></div>
+        <canvas id="chart" height="100"></canvas>
+    </div>
+    <div class="status">
+        <span class="dot disconnected" id="dot"></span>
+        <span id="status-text">Connecting...</span>
+    </div>
+
+<script>
+const MAX_POINTS = 60;
+const stocks = {};
+const history = {};
+let activeSymbol = null;
+let chart = null;
+
+const COLORS = {
+    SBER: '#66bb6a', GAZP: '#42a5f5', LKOH: '#ef5350',
+    YNDX: '#ffa726', BTC: '#ffca28', ETH: '#ab47bc'
+};
+
+// Init chart
+const ctx = document.getElementById('chart').getContext('2d');
+chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: '', data: [], borderColor: '#4fc3f7', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 }] },
+    options: {
+        animation: { duration: 300 },
+        scales: {
+            x: { display: true, ticks: { color: '#546e7a', maxTicksLimit: 10 }, grid: { color: '#1e3040' } },
+            y: { ticks: { color: '#90a4ae' }, grid: { color: '#1e3040' } }
+        },
+        plugins: { legend: { display: false } }
+    }
+});
+
+// Load stocks
+fetch('/api/stocks').then(r => r.json()).then(list => {
+    list.forEach(s => {
+        stocks[s.symbol] = s;
+        history[s.symbol] = [];
+        renderCard(s.symbol);
+        renderTab(s.symbol);
+    });
+    if (list.length > 0) selectTab(list[0].symbol);
+});
+
+function renderCard(symbol) {
+    const s = stocks[symbol];
+    let card = document.getElementById('card-' + symbol);
+    if (!card) {
+        card = document.createElement('div');
+        card.className = 'card';
+        card.id = 'card-' + symbol;
+        card.innerHTML = `
+            <div class="symbol">${symbol} <span class="name">${s.name}</span></div>
+            <div class="price" id="price-${symbol}">—</div>
+            <div class="change" id="change-${symbol}"></div>
+        `;
+        document.getElementById('stocks').appendChild(card);
+    }
+}
+
+function renderTab(symbol) {
+    const btn = document.createElement('button');
+    btn.textContent = symbol;
+    btn.id = 'tab-' + symbol;
+    btn.onclick = () => selectTab(symbol);
+    document.getElementById('tabs').appendChild(btn);
+}
+
+function selectTab(symbol) {
+    activeSymbol = symbol;
+    document.querySelectorAll('.chart-tabs button').forEach(b => b.classList.remove('active'));
+    const tab = document.getElementById('tab-' + symbol);
+    if (tab) tab.classList.add('active');
+    updateChart();
+}
+
+function updateCard(symbol, price, change, changePercent) {
+    const el = document.getElementById('price-' + symbol);
+    const chEl = document.getElementById('change-' + symbol);
+    const card = document.getElementById('card-' + symbol);
+    if (!el) return;
+
+    const cur = stocks[symbol]?.currency === 'USD' ? '$' : '₽';
+    el.textContent = cur + parseFloat(price).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const cp = parseFloat(changePercent);
+    const cls = cp > 0 ? 'up' : cp < 0 ? 'down' : 'neutral';
+    const arrow = cp > 0 ? '▲' : cp < 0 ? '▼' : '—';
+    chEl.className = 'change ' + cls;
+    chEl.textContent = `${arrow} ${parseFloat(change).toFixed(2)} (${cp.toFixed(2)}%)`;
+
+    card.classList.add('flash');
+    setTimeout(() => card.classList.remove('flash'), 500);
+}
+
+function updateChart() {
+    if (!activeSymbol || !history[activeSymbol]) return;
+    const h = history[activeSymbol];
+    chart.data.labels = h.map(p => p.time);
+    chart.data.datasets[0].data = h.map(p => p.price);
+    chart.data.datasets[0].borderColor = COLORS[activeSymbol] || '#4fc3f7';
+    chart.data.datasets[0].label = activeSymbol;
+    chart.update();
+}
+
+// SSE
+const evtSource = new EventSource('/api/stocks/stream');
+
+evtSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    const { stockId, price, change, changePercent, timestamp } = data;
+
+    // Find symbol by stockId
+    const symbol = Object.keys(stocks).find(s => stocks[s].id === stockId);
+    if (!symbol) return;
+
+    const time = new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    if (!history[symbol]) history[symbol] = [];
+    history[symbol].push({ price: parseFloat(price), time });
+    if (history[symbol].length > MAX_POINTS) history[symbol].shift();
+
+    updateCard(symbol, price, change, changePercent);
+    if (symbol === activeSymbol) updateChart();
+};
+
+evtSource.onopen = () => {
+    document.getElementById('dot').className = 'dot connected';
+    document.getElementById('status-text').textContent = 'SSE connected — prices updating live';
+};
+
+evtSource.onerror = () => {
+    document.getElementById('dot').className = 'dot disconnected';
+    document.getElementById('status-text').textContent = 'SSE disconnected — reconnecting...';
+};
+</script>
+</body>
+</html>

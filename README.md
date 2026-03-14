@@ -1,84 +1,113 @@
 # Reactive Stock/Crypto Tracker
 
-![Java](https://img.shields.io/badge/Java-17-orange)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4-green)
+[![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4-green?logo=springboot)](https://spring.io/projects/spring-boot)
+[![WebFlux](https://img.shields.io/badge/Spring-WebFlux-green?logo=spring)](https://docs.spring.io/spring-framework/reference/web/webflux.html)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A reactive application for tracking stock and cryptocurrency prices in real time.
-Built as a learning project to practice Spring WebFlux, R2DBC, and Reactor Kafka.
-
-## Data Sources
-
-- **MOEX ISS** — Russian equities (SBER, GAZP, LKOH, YNDX), free public API (no key required)
-- **CoinGecko** — Cryptocurrencies (BTC, ETH), free public API (no key required)
-
-## Tech Stack
-
-- **Java 17** + **Spring Boot 3.4.x**
-- **Spring WebFlux** (Netty) — functional routing + SSE
-- **WebClient** — reactive HTTP calls to MOEX and CoinGecko
-- **R2DBC PostgreSQL** — reactive database access
-- **Liquibase** — database migrations
-- **Reactor Kafka** — reactive producer/consumer
-- **Testcontainers** — integration tests
+Real-time stock and cryptocurrency price tracker built with reactive stack.
 
 ## Architecture
 
 ```
-WebFlux REST API  <-->  Service Layer (Mono/Flux)  <-->  R2DBC PostgreSQL
-     ^                       ^
-     SSE Stream         Kafka Consumer
-                             ^
-                        Kafka Topic: stock-prices
-                             ^
-                   PriceFetcher (Producer)
-                    /              \
-           MOEX ISS API      CoinGecko API
-          (SBER,GAZP,...)     (BTC, ETH)
+┌──────────────────────────────────────────────────────┐
+│                    Clients                            │
+│          REST API          SSE Stream                 │
+└──────────┬──────────────────┬────────────────────────┘
+           │                  │
+┌──────────▼──────────────────▼────────────────────────┐
+│              Spring WebFlux (Netty)                   │
+│     StockRouter → StockHandler → StockService         │
+└──────────┬──────────────────────────────────────────┘
+           │
+     ┌─────▼─────┐         ┌────────────────┐
+     │  R2DBC    │         │  Reactor Kafka  │
+     │ PostgreSQL│◄────────│   Consumer      │
+     └───────────┘         └───────┬────────┘
+                                   │
+                           ┌───────▼────────┐
+                           │  Kafka Topic    │
+                           │  stock-prices   │
+                           └───────┬────────┘
+                                   │
+                           ┌───────▼────────┐
+                           │ PriceProducer   │
+                           │  (scheduled)    │
+                           └──┬──────────┬──┘
+                              │          │
+                    ┌─────────▼┐   ┌─────▼──────┐
+                    │ Tinkoff  │   │  CoinGecko  │
+                    │ API      │   │  API        │
+                    │ SBER,GAZP│   │  BTC, ETH   │
+                    └──────────┘   └─────────────┘
 ```
 
-## Getting Started
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Java 17, Spring Boot 3.4 |
+| Web | Spring WebFlux (Netty), functional routing |
+| Database | R2DBC PostgreSQL, Liquibase migrations |
+| Messaging | Reactor Kafka (producer/consumer) |
+| HTTP Client | WebClient (reactive, non-blocking) |
+| Testing | JUnit 5, Mockito, StepVerifier, Testcontainers |
+| Infra | Docker Compose (PostgreSQL 16 + Kafka) |
+
+## Data Sources
+
+- **Tinkoff API** — Russian stocks (SBER, GAZP, LKOH, YNDX), free API
+- **CoinGecko API** — Cryptocurrencies (BTC, ETH), free API
+
+## Quick Start
 
 ```bash
-# 1. Start PostgreSQL + Kafka
+# Start infrastructure
 docker-compose up -d
 
-# 2. Run the application
+# Run application
 ./gradlew bootRun
 
-# 3. Try the API
+# Open dashboard
+open http://localhost:8080
+
+# Or use API directly
 curl http://localhost:8080/api/stocks
-curl http://localhost:8080/api/stocks/SBER
-curl -N http://localhost:8080/api/stocks/stream             # SSE — all prices
-curl -N http://localhost:8080/api/stocks/BTC/prices/stream  # SSE — BTC only
+curl -N http://localhost:8080/api/stocks/stream  # SSE live prices
 ```
 
-## API
+## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/stocks` | List all stocks |
+| GET | `/api/stocks` | List all tracked stocks |
 | GET | `/api/stocks/{symbol}` | Get stock by symbol |
-| POST | `/api/stocks` | Add a stock |
-| DELETE | `/api/stocks/{symbol}` | Remove a stock |
-| GET | `/api/stocks/stream` | SSE stream of all prices |
-| GET | `/api/stocks/{symbol}/prices/stream` | SSE stream for a specific stock |
+| POST | `/api/stocks` | Add stock to track |
+| DELETE | `/api/stocks/{symbol}` | Remove stock |
+| GET | `/api/stocks/stream` | SSE stream — all prices |
+| GET | `/api/stocks/{symbol}/prices/stream` | SSE stream — single stock |
 | GET | `/api/stocks/{symbol}/prices?limit=50` | Price history |
 
-## Tests
+## Testing
 
 ```bash
 ./gradlew test
 ```
 
-- **StockServiceTest** — unit tests with StepVerifier + Mockito
-- **StockHandlerTest** — WebFlux tests with WebTestClient
-- **PriceFlowIntegrationTest** — end-to-end with Testcontainers (PostgreSQL + Kafka)
+| Test Class | Type | What it covers |
+|-----------|------|---------------|
+| `StockServiceTest` | Unit | CRUD operations, StepVerifier + Mockito |
+| `StockHandlerTest` | WebFlux | Handlers with WebTestClient |
+| `PriceFlowIntegrationTest` | E2E | Full flow with Testcontainers (PostgreSQL + Kafka) |
 
-## Patterns Used
+## Key Patterns
 
-1. Functional routing (`RouterFunction` + `HandlerFunction`)
-2. SSE via `Flux` + `MediaType.TEXT_EVENT_STREAM`
-3. `StepVerifier` for testing reactive streams
-4. Reactor Kafka — reactive producer/consumer
-5. WebClient — reactive HTTP client
-6. Explicit constructor-based DI (no `@Autowired`)
+- **Functional routing** — `RouterFunction` + `HandlerFunction` instead of `@RestController`
+- **SSE streaming** — `Flux<T>` + `MediaType.TEXT_EVENT_STREAM` for real-time updates
+- **Reactive Kafka** — non-blocking producer/consumer with Project Reactor
+- **StepVerifier** — testing reactive streams step by step
+- **Constructor injection** — explicit DI, no `@Autowired`
+
+## License
+
+[MIT](LICENSE)
